@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  《大数据技术》课程期末项目 — 成员3 算法模块（第二阶段）
+  最小 pom.xml：仅 Hadoop 客户端依赖 + 编译插件，source/target = 1.8
+
+  【重要】HADOOP_VERSION 必须与集群实际版本一致，请向成员2/组长确认后再打包，
+          否则会出现序列化不兼容或 NoSuchMethodError（Hadoop 跨大版本 API 有变动）。
+          查询集群版本：hadoop version   或   在 NameNode 机器上执行 hdfs version
+
+  本 pom 不含任何 ML / 分词 / JSON / Web 框架 / CLI 库依赖（规范硬性禁止）。
+  HTTP 服务用 JDK 内置 com.sun.net.httpserver，JSON 手写 StringBuilder。
+
+  若不用 Maven：见 README「无 Maven 的手动 classpath 方案」，
+  本项目已实测用 javac -cp 直接编译 lib/*.jar 即可，无需 Maven。
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.movie</groupId>
+    <artifactId>sentiment-multilabel</artifactId>
+    <version>2.0</version>
+    <packaging>jar</packaging>
+    <name>Movie Multi-Label Genre Classifier</name>
+    <description>TF-IDF + 多标签朴素贝叶斯（one-vs-rest + 阈值激活），本地/HDFS 双模式，含 HTTP 后端</description>
+
+    <properties>
+        <!-- ═══ 必改项：与集群 Hadoop 版本一致（向成员2/组长确认）═══ -->
+        <HADOOP_VERSION>3.3.6</HADOOP_VERSION>
+
+        <!-- 编译目标锁定 JDK 8：课程集群通常仍为 JDK 8，
+             用高版本字节码会报 UnsupportedClassVersionError -->
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- 主类：hadoop jar 提交 MR 作业时用；本地 train/predict/serve 也走这个入口 -->
+        <main.class>com.movie.sentiment.Main</main.class>
+    </properties>
+
+    <dependencies>
+        <!--
+          hadoop-client 是聚合依赖，会传递引入 hadoop-common / hdfs-client /
+          mapreduce-client-core / yarn-client，一个坐标即可覆盖读写 HDFS 与提交 MR 作业。
+
+          scope=provided 的理由：集群上 hadoop jar 命令会自动把 Hadoop 自身的 jar
+          放进 classpath；若打成 compile 会把 20+ MB 的 Hadoop jar 塞进我们的 jar，
+          既臃肿又可能与集群版本冲突（典型症状 NoSuchMethodError / LinkageError）。
+          仅当要脱离集群独立运行后端服务时，才需按 README 的手动 classpath 方案
+          把 Hadoop jar 一起放进 classpath。
+        -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client</artifactId>
+            <version>${HADOOP_VERSION}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+          【备选】若集群版本较低（如 2.x）或希望按需精简依赖，
+          可把上面的 hadoop-client 换成下面三个坐标（本项目已实测该组合
+          足以覆盖 HdfsIO / ModelSerializer / MR 模块用到的全部 API）：
+
+          hadoop-common                  ${HADOOP_VERSION}  provided
+          hadoop-hdfs-client             ${HADOOP_VERSION}  provided
+          hadoop-mapreduce-client-core   ${HADOOP_VERSION}  provided
+
+          注意：这三个坐标的运行期传递依赖（woodstox-core、commons-configuration2、
+          slf4j-api、commons-compress、hadoop-shaded-guava、hadoop-shaded-protobuf
+          等）由 Maven 自动解析；手动 javac/java 时必须自己备齐，
+          否则会在运行期报 NoClassDefFoundError（本项目实测踩过这几个坑，
+          完整清单见 README）。
+        -->
+    </dependencies>
+
+    <build>
+        <!-- 源码目录：本项目沿用「java代码/com/movie/sentiment」布局，
+             源文件包名为 com.movie.sentiment，故包结构根就是 pom.xml 所在目录（.）。
+             【不可】写成 com：那样 Maven 会以 com/ 为根，期望包名 movie.sentiment，
+             与实际声明的 com.movie.sentiment 不符而编译失败。
+             若改用 Maven 标准布局，把源码移到 src/main/java 下并删除此段即可。 -->
+        <sourceDirectory>.</sourceDirectory>
+
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                    <encoding>UTF-8</encoding>
+                    <!-- 关闭「源值 8 已过时」警告：课程要求锁定 JDK 8，该警告无意义 -->
+                    <compilerArgs>
+                        <arg>-Xlint:-options</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!-- 打可执行 jar：manifest 写 Main-Class，便于 java -jar 与 hadoop jar 使用 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>${main.class}</mainClass>
+                        </manifest>
+                    </archive>
+                    <!-- 产出 sentiment-mr.jar，与 README 里 hadoop jar 命令对应 -->
+                    <finalName>sentiment-mr</finalName>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
