@@ -26,8 +26,8 @@
     <description>TF-IDF + 多标签朴素贝叶斯（one-vs-rest + 阈值激活），本地/HDFS 双模式，含 HTTP 后端</description>
 
     <properties>
-        <!-- ═══ 必改项：与集群 Hadoop 版本一致（向成员2/组长确认）═══ -->
-        <HADOOP_VERSION>3.3.6</HADOOP_VERSION>
+        <!-- 已在成员2交付的 master/slave1 集群核实 -->
+        <HADOOP_VERSION>3.2.2</HADOOP_VERSION>
 
         <!-- 编译目标锁定 JDK 8：课程集群通常仍为 JDK 8，
              用高版本字节码会报 UnsupportedClassVersionError -->

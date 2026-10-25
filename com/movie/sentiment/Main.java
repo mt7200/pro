@@ -660,7 +660,7 @@ public class Main {
         System.out.println();
         System.out.println("默认值（均可用环境变量覆盖：NAMENODE_URI / HDFS_TRAIN / HDFS_PREDICT /");
         System.out.println("        HDFS_MODEL / LOCAL_MODEL / PREDICT_RESULT / METRICS_OUT / SERVER_PORT）：");
-        System.out.println("  --namenode    = " + DEF_NAMENODE + "   ← 向成员2确认实际地址（8020? 9000?）");
+        System.out.println("  --namenode    = " + DEF_NAMENODE + "   ← 本项目实测 NameNode");
         System.out.println("  --input(train)= " + DEF_HDFS_TRAIN);
         System.out.println("  --input(pred) = " + DEF_HDFS_PREDICT);
         System.out.println("  --model-hdfs  = " + DEF_HDFS_MODEL);

@@ -68,10 +68,9 @@ cd java代码
 mvn -q package          # 产出 target/sentiment-mr.jar
 ```
 
-`pom.xml` 里的 `HADOOP_VERSION` 当前为 **3.3.6**，
-**必须向成员2/组长确认集群实际版本后修改**，否则可能出现
-`NoSuchMethodError` / 序列化不兼容（Hadoop 跨大版本 API 有变动）。
-查询集群版本：`hadoop version`。
+`pom.xml` 里的 `HADOOP_VERSION` 当前为 **3.2.2**，与成员2交付的
+`master`/`slave1` 集群一致。仓库 `lib/` 中的本地客户端 jar 仍为 3.3.6，
+仅用于无集群开发；在课程集群提交时使用集群自带的 Hadoop 3.2.2。
 
 > 说明：本机未安装 Maven，故 `mvn package` 未经实跑验证；
 > 已验证的是方式 A 的 javac 直接编译（16 个源文件全部通过 JDK 8 目标编译）。
@@ -82,7 +81,7 @@ mvn -q package          # 产出 target/sentiment-mr.jar
 
 | 占位符 | 命令行参数 | 环境变量 | 默认值 |
 |---|---|---|---|
-| `${NAMENODE_URI}` | `--namenode` | `NAMENODE_URI` | `hdfs://localhost:9000` |
+| `${NAMENODE_URI}` | `--namenode` | `NAMENODE_URI` | `hdfs://master:9000` |
 | `${HDFS_TRAIN}` | `--input`(train) | `HDFS_TRAIN` | `/input/movies-from-kggle.txt` |
 | `${HDFS_PREDICT}` | `--input`(predict) | `HDFS_PREDICT` | `/input/movies-to-be-predicted.txt` |
 | `${HDFS_MODEL}` | `--model-hdfs` | `HDFS_MODEL` | `/output/model.dat` |
@@ -92,7 +91,7 @@ mvn -q package          # 产出 target/sentiment-mr.jar
 | `${SERVER_PORT}` | `--port` | `SERVER_PORT` | `8080` |
 | `${HADOOP_USER}` | `--hadoop-user` | `HADOOP_USER` | 空（简单认证） |
 
-**⚠️ 向成员2确认**：NameNode 实际地址与端口（常见 `8020` 或 `9000`）。
+**已核实**：NameNode 为 `hdfs://master:9000`，Web UI 为 `http://master:9870`。
 
 ---
 
@@ -243,7 +242,7 @@ sigmoid 校准概率，取值 0~1，**多个标签之间不相加为 1**——
 保证联调 deadline 不因集群抖动卡死。映射规则：去掉 scheme+authority 与前导斜杠。
 
 ```
-hdfs://localhost:9000/output/model.dat  →  output/model.dat
+hdfs://master:9000/output/model.dat  →  output/model.dat
 /input/movies-from-kggle.txt            →  input/movies-from-kggle.txt
 ```
 

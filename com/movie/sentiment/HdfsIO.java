@@ -45,8 +45,8 @@ public class HdfsIO {
 
     // ─────────────── 运行期环境占位符（对应任务书的 ${...}，全部可命令行/环境变量覆盖） ───────────────
 
-    /** ${NAMENODE_URI} 默认值：向成员2/组长确认实际 NameNode 地址与端口（常见 8020 或 9000） */
-    public static final String DEFAULT_NAMENODE_URI = "hdfs://localhost:9000";
+    /** 本项目实测 NameNode；仍可由命令行或环境变量覆盖。 */
+    public static final String DEFAULT_NAMENODE_URI = "hdfs://master:9000";
 
     /** ${HADOOP_USER} 默认值：空 = 简单认证，不指定用户（课程集群一般不开 Kerberos） */
     public static final String DEFAULT_HADOOP_USER = "";
