@@ -70,6 +70,9 @@ public class Main {
             case "train":
                 doTrain(opts);
                 break;
+            case "calibrate":
+                doCalibrate(opts);
+                break;
             case "predict":
                 doPredict(opts);
                 break;
@@ -250,6 +253,63 @@ public class Main {
         System.out.println("\n══════ 训练完成 ══════");
     }
 
+    // ──────────────────── calibrate 子命令 ────────────────────
+
+    /**
+     * 对已有模型补做阈值校准（典型用途：MapReduce 产出的模型）。
+     *
+     * <p>MR 训练只在 driver 端汇聚计数量，无法在集群上做"留出集反复打分搜阈值"，
+     * 所以 MrTrainDriver 写出的模型 tauPerGenre 为空，预测时退化为全局 tau=0.0。
+     * 而 log 域分数是较大负数，tau=0.0 不会激活任何标签。
+     *
+     * <p>本命令不重算词表 / IDF / 概率，只复用与单机 train 完全相同的校准实现：
+     * 90%/10% 留出切分 + 逐 genre 绝对阈值 + TEXT 按命中词数分桶，
+     * 校准结果就地写回模型（本地 + 可选 HDFS）。
+     */
+    private static void doCalibrate(Map<String, String> opts) throws Exception {
+        String srcModel = opts.containsKey("model")
+                ? opts.get("model").trim() : opts.get("model-hdfs");
+        if (srcModel == null || srcModel.trim().isEmpty()) {
+            srcModel = DEF_LOCAL_MODEL;
+        }
+        String inputPath = opt(opts, "input", "HDFS_TRAIN", DEF_HDFS_TRAIN);
+        String outLocal = opt(opts, "model-local", "LOCAL_MODEL", "output/model-calibrated.dat");
+        String outHdfs = opts.get("out-model-hdfs");
+        int calibSamples = Integer.parseInt(opts.getOrDefault("calibrate-samples", "20000"));
+
+        System.out.println("══════ 阈值校准开始 ══════");
+        System.out.println("待校准模型 : " + srcModel);
+        System.out.println("校准数据集 : " + inputPath);
+        System.out.println("本地输出   : " + outLocal
+                + (outHdfs == null ? "" : "   HDFS输出: " + outHdfs));
+
+        ModelParams model = loadModelOrFail(srcModel);
+        System.out.printf(Locale.ROOT, "模型已加载: |V|=%d |G|=%d N=%d 逐genre校准=%s%n",
+                model.V, model.G, model.N,
+                model.hasPerGenreCalibration() ? "已启用" : "未启用");
+
+        List<Sample> samples = new DataParser().parseFile(inputPath);
+        System.out.println("校准样本数 N = " + samples.size());
+        if (samples.size() < 20) {
+            throw new IllegalStateException("校准样本不足 20 条，无法做留出校准：路径=" + inputPath);
+        }
+
+        NbTrainer.calibrate(model, samples, calibSamples);
+        NbTrainer.calibrateTextProfileByK(model, samples, calibSamples);
+
+        if (ModelSerializer.dualWrite(model, outHdfs, outLocal) == 0) {
+            throw new IOException("模型未写入任何路径，请检查 --model-local / --out-model-hdfs");
+        }
+
+        System.out.println("\n── 校准后的逐 genre 阈值 ──");
+        for (int i = 0; i < model.G; i++) {
+            System.out.printf(Locale.ROOT, "  %-20s tau=%s%n", model.genreArr[i],
+                    model.hasPerGenreCalibration()
+                            ? String.format(Locale.ROOT, "%.4f", model.tauPerGenre[i]) : "未校准");
+        }
+        System.out.println("\n══════ 校准完成 ══════");
+    }
+
     private static void printTopTfidf(List<Sample> samples, VocabIdfBuilder vb, int topK) {
         int V = vb.vocabArr.length;
         double[] sumTfidf = new double[V];   // 所有样本 TF-IDF 权重之和（此统计量可在 Reduce 端聚合）
@@ -327,7 +387,8 @@ public class Main {
                 model.hasPerGenreCalibration() ? "已启用" : "未启用",
                 model.hasTextCalibration() ? "已启用" : "未启用");
 
-        NbPredictor predictor = new NbPredictor(model);
+        NbPredictor predictor = buildPredictor(model, opts);
+
 
         // 解析预测数据（与训练共用同一 DataParser 与同一 normalize 规则）
         DataParser parser = new DataParser();
@@ -476,7 +537,8 @@ public class Main {
         }
 
         ModelParams model = loadModelOrFail(modelPath);
-        NbPredictor predictor = new NbPredictor(model);
+        NbPredictor predictor = buildPredictor(model, opts);
+
 
         // 统一走 resolveTags：自动识别"原始数据行 / tag 串 / 自然语言句子"三种形态，
         // 与后端 /predict 使用完全相同的入口，保证实时与批量同源。
@@ -522,7 +584,74 @@ public class Main {
 
         ModelParams model = loadModelOrFail(modelPath);
         // 启动即构造 predictor 单例（无状态、线程安全），每请求复用
-        new PredictServer(model, port).start();
+        new PredictServer(model, port,
+                Double.parseDouble(opt(opts, "z-threshold", "Z_THRESHOLD", "0")),
+                Double.parseDouble(opt(opts, "min-prior", "MIN_PRIOR", "0.005")),
+                loadGenreZThresholds(opts.get("z-thresholds"), model)).start();
+    }
+
+    /**
+     * 统一构造 predictor：解析 --z-threshold / --min-prior / --z-thresholds。
+     *
+     * <p>--z-thresholds 指向逐 genre 阈值表（JSON，形如 {"drama":0.95,...}），
+     * 用于替代全局统一的 z 阈值；文件不存在或解析失败时自动回退到统一阈值，
+     * 保证老命令（只给 --z-threshold）行为完全不变。
+     */
+    private static NbPredictor buildPredictor(ModelParams model, Map<String, String> opts) {
+        double z = Double.parseDouble(opt(opts, "z-threshold", "Z_THRESHOLD", "0"));
+        double minPrior = Double.parseDouble(opt(opts, "min-prior", "MIN_PRIOR", "0.005"));
+        return new NbPredictor(model, z, minPrior,
+                loadGenreZThresholds(opts.get("z-thresholds"), model));
+    }
+
+    /**
+     * 读取逐 genre 的 z 阈值表；返回 null 表示不启用（走统一阈值）。
+     * 只做最朴素的 key:number 解析，缺项 genre 保持全局阈值对应的默认值 1.25。
+     */
+    static double[] loadGenreZThresholds(String path, ModelParams model) {
+        if (path == null || path.isEmpty()) {
+            return null;
+        }
+        File f = new File(path);
+        if (!f.isFile()) {
+            System.err.println("[WARN] 阈值表不存在，回退到统一 z 阈值: " + path);
+            return null;
+        }
+        try {
+            String text = new String(java.nio.file.Files.readAllBytes(f.toPath()),
+                    StandardCharsets.UTF_8);
+            double[] out = new double[model.G];
+            Arrays.fill(out, 1.25);
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("\"([A-Za-z]+)\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)")
+                    .matcher(text);
+            int hit = 0;
+            while (m.find()) {
+                int gi = indexOfGenre(model.genreArr, m.group(1));
+                if (gi >= 0) {
+                    out[gi] = Double.parseDouble(m.group(2));
+                    hit++;
+                }
+            }
+            if (hit == 0) {
+                System.err.println("[WARN] 阈值表未匹配到任何 genre，回退统一阈值: " + path);
+                return null;
+            }
+            System.out.println("[DECISION] 已加载逐 genre z 阈值: " + hit + " 项 <- " + path);
+            return out;
+        } catch (Exception e) {
+            System.err.println("[WARN] 阈值表解析失败，回退统一阈值: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static int indexOfGenre(String[] genreArr, String name) {
+        for (int i = 0; i < genreArr.length; i++) {
+            if (genreArr[i].equalsIgnoreCase(name)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     // ══════════════ 供成员4 后端直接调用的公共 API（免 HTTP 开销） ══════════════
@@ -654,9 +783,14 @@ public class Main {
         System.out.println("     java com.movie.sentiment.Main predict-single --model " + DEF_LOCAL_MODEL);
         System.out.println("        --text \"A space marine battles aliens...\" [--format full|api]");
         System.out.println();
-        System.out.println("  5) MapReduce 训练（可选加分项，需集群 YARN）");
+        System.out.println("  5) MapReduce 训练（需集群 YARN；产物不含阈值校准，需再跑 calibrate）");
         System.out.println("     hadoop jar sentiment-mr.jar com.movie.sentiment.mr.MrTrainDriver \\");
         System.out.println("        -input " + DEF_HDFS_TRAIN + " -model " + DEF_HDFS_MODEL);
+        System.out.println();
+        System.out.println("  6) 对已有模型补做阈值校准（MR 模型必跑，否则 tau=0.0 无法激活标签）");
+        System.out.println("     java com.movie.sentiment.Main calibrate \\");
+        System.out.println("        --model-hdfs /output/model-mr.dat --input " + DEF_HDFS_TRAIN + " \\");
+        System.out.println("        --model-local output/model-mr-calibrated.dat [--out-model-hdfs /output/model-mr-calibrated.dat]");
         System.out.println();
         System.out.println("默认值（均可用环境变量覆盖：NAMENODE_URI / HDFS_TRAIN / HDFS_PREDICT /");
         System.out.println("        HDFS_MODEL / LOCAL_MODEL / PREDICT_RESULT / METRICS_OUT / SERVER_PORT）：");

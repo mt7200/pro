@@ -61,8 +61,24 @@ public class PredictServer {
     private HttpServer server;
 
     public PredictServer(ModelParams model, int port) {
+        this(model, port, 0.0, 0.0);
+    }
+
+    /**
+     * @param zThreshold 行内 z 分数阈值，&gt;0 启用相对阈值决策（提高精确率）
+     * @param minPrior   长尾 genre 先验下限，低于此值的 genre 不参与激活
+     */
+    public PredictServer(ModelParams model, int port, double zThreshold, double minPrior) {
+        this(model, port, zThreshold, minPrior, null);
+    }
+
+    /**
+     * @param zTauPerGenre 逐 genre 的 z 阈值表（null → 统一使用 zThreshold）
+     */
+    public PredictServer(ModelParams model, int port, double zThreshold, double minPrior,
+                         double[] zTauPerGenre) {
         this.model = model;
-        this.predictor = new NbPredictor(model);
+        this.predictor = new NbPredictor(model, zThreshold, minPrior, zTauPerGenre);
         this.port = port;
     }
 

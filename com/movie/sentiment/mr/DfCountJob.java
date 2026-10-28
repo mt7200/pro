@@ -2,6 +2,7 @@ package com.movie.sentiment.mr;
 
 import com.movie.sentiment.DataParser;
 import com.movie.sentiment.Sample;
+import com.movie.sentiment.TokenFilter;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -121,6 +122,10 @@ public class DfCountJob {
             // DF(t)：文档内每个唯一 tag 计 1
             dedup.clear();
             for (String t : s.tags) {
+                // 与单机训练同一口径：过滤非英文字母/数字构成的词条
+                if (!TokenFilter.isValid(t)) {
+                    continue;
+                }
                 if (dedup.add(t)) {
                     outKey.set(PREFIX_TAG + t);
                     context.write(outKey, ONE);

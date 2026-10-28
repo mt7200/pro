@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+
+    <!-- 让页面在手机和电脑上都能正常显示 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>电影多标签预测系统</title>
+
+    <style>
+        /* 统一页面颜色和基础字体 */
+        :root {
+            --primary: #6257e8;
+            --primary-dark: #4e43ce;
+            --bg: #f5f6fc;
+            --text: #22253a;
+            --muted: #737990;
+            --border: #e6e8f2;
+            --success: #16875b;
+        }
+
+        /* 让元素尺寸计算更容易控制 */
+        * {
+            box-sizing: border-box;
+        }
+
+        /* 页面基础布局 */
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Microsoft YaHei", "PingFang SC",
+                         Arial, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(
+                    circle at top left,
+                    #e9e7ff 0,
+                    transparent 38%
+                ),
+                var(--bg);
+        }
+
+        /* 整体容器 */
+        .container {
+            width: min(900px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 48px 0;
+        }
+
+        /* 顶部标题区 */
+        .hero {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .logo {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 18px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 20px;
+            color: white;
+            font-size: 30px;
+            background: linear-gradient(135deg, #776cf5, #4c40cf);
+            box-shadow: 0 10px 28px #6257e833;
+        }
+
+        .hero h1 {
+            margin: 0 0 12px;
+            font-size: clamp(25px, 4vw, 36px);
+            letter-spacing: 1px;
+        }
+
+        .hero p {
+            margin: 0;
+            line-height: 1.8;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        /* 白色主面板 */
+        .panel {
+            padding: 28px;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(230, 232, 242, 0.9);
+            border-radius: 20px;
+            box-shadow: 0 16px 50px #34365c0c;
+        }
+
+        /* 面板小标题 */
+        .section-title {
+            margin: 0 0 10px;
+            font-size: 19px;
+        }
+
+        .description {
+            margin: 0 0 20px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        /* 剧情输入框 */
+        textarea {
+            display: block;
+            width: 100%;
+            min-height: 145px;
+            padding: 16px;
+            resize: vertical;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            outline: none;
+            background: #fbfbfe;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.8;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px #6257e81c;
+        }
+
+        /* 输入框下方的字数提示 */
+        .input-footer {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        /* 主要操作按钮 */
+        .predict-button {
+            width: 100%;
+            margin-top: 22px;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #7469f2, #5145d4);
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s;
+        }
+
+        .predict-button:hover:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        /* 请求期间按钮置灰，避免重复点击 */
+        .predict-button:disabled {
+            opacity: 0.58;
+            cursor: not-allowed;
+        }
+
+        /* 提示信息 */
+        .status {
+            margin-top: 16px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .status.error {
+            color: #b42318;
+            background: #fff0ee;
+        }
+
+        .status.info {
+            color: #5145d4;
+            background: #f0efff;
+        }
+
+        /* 结果区域与输入区之间的间距 */
+        .results-section {
+            margin-top: 28px;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .result-header h2 {
+            margin: 0;
+            font-size: 19px;
+        }
+
+        .result-count {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        /* 结果列表（表格形式，无竖线） */
+        .label-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        /* 表头：下横线稍粗 */
+        .label-table thead th {
+            padding: 10px 8px;
+            text-align: left;
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--muted);
+            border-bottom: 2px solid #d8d9e8;
+            white-space: nowrap;
+        }
+
+        /* 表体行：下横线较细 */
+        .label-table tbody td {
+            padding: 12px 8px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        /* 序号列 */
+        .label-table .col-index {
+            width: 48px;
+            color: var(--primary-dark);
+            font-weight: 700;
+            text-align: center;
+        }
+
+        /* 标签名列 */
+        .label-table .col-name {
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+
+        /* 置信度进度条列 */
+        .label-table .col-bar {
+            width: 40%;
+            min-width: 140px;
+        }
+
+        /* 数值列 */
+        .label-table .col-value {
+            width: 90px;
+            text-align: right;
+            color: var(--primary);
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        /* 置信度进度条背景 */
+        .progress-track {
+            height: 8px;
+            border-radius: 99px;
+            overflow: hidden;
+            background: #eeedf8;
+        }
+
+        /* 置信度进度条前景 */
+        .progress-fill {
+            height: 100%;
+            width: 0;
+            border-radius: 99px;
+            background: linear-gradient(90deg, #8176ff, #5145d4);
+            transition: width 0.6s ease;
+        }
+
+        /* 尚未预测时的占位内容 */
+        .empty-state {
+            padding: 28px 16px;
+            text-align: center;
+            border: 1px dashed #d8d9e8;
+            border-radius: 14px;
+            color: var(--muted);
+            background: #fafaff;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .empty-icon {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 27px;
+        }
+
+        /* 页面底部说明 */
+        .footer {
+            margin-top: 22px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.8;
+        }
+
+        /* 窄屏下调整内边距 */
+        @media (max-width: 600px) {
+            .container {
+                padding: 28px 0;
+            }
+
+            .panel {
+                padding: 20px;
+            }
+
+            .label-table thead th,
+            .label-table tbody td {
+                padding: 10px 6px;
+            }
+
+            .label-table .col-bar {
+                min-width: 90px;
+            }
+
+            .label-table .col-value {
+                width: 72px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+
+        <!-- 页面标题 -->
+        <header class="hero">
+            <div class="logo">🎬</div>
+            <h1>电影多标签预测系统</h1>
+        </header>
+
+        <section class="panel">
+
+            <!-- 输入区域 -->
+            <h2 class="section-title">电影剧情描述</h2>
+            <p class="description">
+                请输入一段电影剧情，系统将返回全部命中的预测标签及对应置信度。
+            </p>
+
+            <textarea
+                id="movieText"
+                maxlength="2000"
+                placeholder="例如：A brave hero travels through a mysterious world to save his family..."
+                aria-label="电影剧情描述"
+            ></textarea>
+
+            <div class="input-footer">
+                <span>仅支持英文剧情描述</span>
+                <span id="charCount">0 / 2000</span>
+            </div>
+
+            <!-- 点击后调用后端接口 -->
+            <button
+                id="predictButton"
+                class="predict-button"
+                type="button"
+            >
+                ✦ 开始预测
+            </button>
+
+            <!-- 展示请求状态或错误信息 -->
+            <div
+                id="statusMessage"
+                role="status"
+                aria-live="polite"
+                hidden
+            ></div>
+
+            <!-- 预测结果区域 -->
+            <section class="results-section">
+                <div class="result-header">
+                    <h2>预测结果</h2>
+                    <span id="resultCount" class="result-count">
+                        等待预测
+                    </span>
+                </div>
+
+                <!-- 初始状态下显示占位信息 -->
+                <div id="emptyState" class="empty-state">
+                    <span class="empty-icon">✧</span>
+                    请在上方输入电影剧情，点击“开始预测”<br>
+                    预测标签将显示在这里。
+                </div>
+
+                <!-- JavaScript 会在这里动态生成结果表格 -->
+                <table id="labelTable" class="label-table" hidden>
+                    <thead>
+                        <tr>
+                            <th class="col-index" scope="col">#</th>
+                            <th class="col-name" scope="col">标签</th>
+                            <th class="col-bar" scope="col">置信度</th>
+                            <th class="col-value" scope="col">数值</th>
+                        </tr>
+                    </thead>
+                    <tbody id="labelTableBody"></tbody>
+                </table>
+            </section>
+        </section>
+
+        <footer class="footer">
+            电影多标签情感预测系统 · TF-IDF / 朴素贝叶斯
+        </footer>
+    </main>
+
+    <script>
+        // 后端接口地址。
+        // 如果前后端部署在不同电脑上，应把 localhost 换成后端电脑的 IP。
+        // 注意：不要加 ?topN=5 —— 后端默认返回全部通过阈值的标签，
+        // 一旦带 topN 就只保留置信度最高的 N 个，前端会误以为"只识别出 5 个"。
+        const API_URL = "http://localhost:8080/predict";
+
+        // 获取页面上的交互元素。
+        const movieText = document.getElementById("movieText");
+        const predictButton = document.getElementById("predictButton");
+        const statusMessage = document.getElementById("statusMessage");
+        const charCount = document.getElementById("charCount");
+        const labelTable = document.getElementById("labelTable");
+        const labelTableBody = document.getElementById("labelTableBody");
+        const emptyState = document.getElementById("emptyState");
+        const resultCount = document.getElementById("resultCount");
+
+        // 监听输入变化，实时更新字符数。
+        movieText.addEventListener("input", function () {
+            charCount.textContent = movieText.value.length + " / 2000";
+        });
+
+        /**
+         * 显示状态消息。
+         * type 可以是 info 或 error。
+         */
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = "status " + type;
+            statusMessage.hidden = false;
+        }
+
+        // 隐藏状态消息。
+        function hideStatus() {
+            statusMessage.hidden = true;
+            statusMessage.textContent = "";
+        }
+
+        // 隐藏结果表格（回到无结果状态）。
+        function hideTable() {
+            labelTable.hidden = true;
+            labelTableBody.replaceChildren();
+        }
+
+        /**
+         * 根据后端返回的 labels 数组生成结果列表（表格）。
+         *
+         * 每行包括：
+         * 1. 序号（按置信度从高到低）。
+         * 2. 标签名称。
+         * 3. 可视化置信度进度条。
+         * 4. 置信度数值。
+         */
+        function renderResults(labels) {
+
+            // 先清空之前的预测结果，避免重复叠加。
+            labelTableBody.replaceChildren();
+            labelTable.hidden = true;
+
+            // 没有标签时显示空状态。
+            if (!Array.isArray(labels) || labels.length === 0) {
+                emptyState.hidden = false;
+                emptyState.innerHTML = "<span class='empty-icon'>✧</span>未识别到已知特征词，请补充更具体的剧情描述。";
+                resultCount.textContent = "0 个标签";
+                return;
+            }
+
+            // 过滤无效数据，并按置信度从高到低排序。
+            const validLabels = labels
+                .filter(function (label) {
+                    return (
+                        label &&
+                        typeof label.name === "string" &&
+                        typeof label.confidence === "number" &&
+                        Number.isFinite(label.confidence)
+                    );
+                })
+                .sort(function (a, b) {
+                    return b.confidence - a.confidence;
+                });
+
+            // 如果没有有效标签，显示提示。
+            if (validLabels.length === 0) {
+                emptyState.hidden = false;
+                emptyState.textContent = "返回数据格式不正确，请检查后端接口。";
+                resultCount.textContent = "暂无有效标签";
+                return;
+            }
+
+            emptyState.hidden = true;
+            resultCount.textContent = validLabels.length + " 个标签";
+
+            validLabels.forEach(function (label, index) {
+
+                // 将分数限制在 0～1 范围内。
+                const score = Math.max(
+                    0,
+                    Math.min(1, label.confidence)
+                );
+
+                const percentage = (score * 100).toFixed(1);
+
+                // 创建表格行。
+                const row = document.createElement("tr");
+
+                // 序号列（从 1 开始）。
+                const indexCell = document.createElement("td");
+                indexCell.className = "col-index";
+                indexCell.textContent = String(index + 1);
+
+                // 标签名列。
+                const nameCell = document.createElement("td");
+                nameCell.className = "col-name";
+                nameCell.textContent = label.name;
+
+                // 置信度进度条列。
+                const barCell = document.createElement("td");
+                barCell.className = "col-bar";
+
+                const track = document.createElement("div");
+                track.className = "progress-track";
+                track.setAttribute("role", "progressbar");
+                track.setAttribute("aria-label", label.name + " 置信度");
+                track.setAttribute("aria-valuemin", "0");
+                track.setAttribute("aria-valuemax", "100");
+                track.setAttribute("aria-valuenow", percentage);
+
+                const fill = document.createElement("div");
+                fill.className = "progress-fill";
+                fill.style.width = percentage + "%";
+
+                track.appendChild(fill);
+                barCell.appendChild(track);
+
+                // 数值列。
+                const valueCell = document.createElement("td");
+                valueCell.className = "col-value";
+                valueCell.textContent = percentage + "%";
+
+                row.append(indexCell, nameCell, barCell, valueCell);
+                labelTableBody.appendChild(row);
+            });
+
+            labelTable.hidden = false;
+        }
+
+        /**
+         * 点击按钮后调用 POST /predict。
+         *
+         * 流程：
+         * 1. 检查输入。
+         * 2. 禁用按钮并显示“预测中”。
+         * 3. 使用 Fetch API 发送 JSON。
+         * 4. 解析响应并渲染多个标签。
+         * 5. 无论成功或失败，最终恢复按钮。
+         */
+        async function predict() {
+
+            const text = movieText.value.trim();
+
+            // 前端先拦截空输入，减少无效请求。
+            if (!text) {
+                showStatus("请先输入电影剧情描述。", "error");
+                movieText.focus();
+                return;
+            }
+
+            // 进入加载状态。
+            predictButton.disabled = true;
+            predictButton.textContent = "⏳ 预测中...";
+            hideStatus();
+
+            try {
+
+                // 发起 HTTP POST 请求。
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify({
+                        text: text
+                    })
+                });
+
+                // 将响应正文解析为 JSON。
+                const data = await response.json();
+
+                // 处理 HTTP 400、500 等错误响应。
+                if (!response.ok || data.success !== true) {
+                    throw new Error(
+                        data.message || ("请求失败，HTTP " + response.status)
+                    );
+                }
+
+                // 检查成功响应中的多标签数组。
+                if (!Array.isArray(data.labels)) {
+                    throw new Error("后端响应缺少 labels 数组。");
+                }
+
+                // 显示预测结果。
+                renderResults(data.labels);
+
+                // 告知用户当前响应来自接口。
+                showStatus(
+                    data.message || "预测请求完成。",
+                    "info"
+                );
+
+            } catch (error) {
+
+                // 网络异常、接口未启动、JSON 格式错误等均会到这里。
+                hideTable();
+                emptyState.hidden = false;
+                emptyState.textContent =
+                    "暂时无法获取预测结果，请检查后端服务是否已启动。";
+                resultCount.textContent = "预测失败";
+
+                showStatus(
+                    "请求失败：" + error.message +
+                    "。请确认 Java 服务运行在 8080 端口。",
+                    "error"
+                );
+
+                console.error("预测接口调用失败：", error);
+
+            } finally {
+
+                // 不论请求成功还是失败，都恢复按钮。
+                predictButton.disabled = false;
+                predictButton.textContent = "✦ 开始预测";
+            }
+        }
+
+        // 绑定按钮点击事件。
+        predictButton.addEventListener("click", predict);
+
+        // Ctrl + Enter 也可以触发预测，方便测试。
+        movieText.addEventListener("keydown", function (event) {
+            if (event.ctrlKey && event.key === "Enter") {
+                predict();
+            }
+        });
+    </script>
+</body>
+</html>

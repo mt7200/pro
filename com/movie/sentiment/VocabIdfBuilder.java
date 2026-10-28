@@ -52,6 +52,11 @@ public class VocabIdfBuilder {
         for (Sample s : trainSamples) {
             Set<String> seen = new HashSet<>();
             for (String t : s.tags) {
+                // 训练阶段过滤非英文字母/数字构成的词条（任务书硬性要求）
+                if (!TokenFilter.isValid(t)) {
+                    TokenFilter.filteredCount++;
+                    continue;
+                }
                 if (seen.add(t)) {
                     // 此统计量可在 Reduce 端聚合：各 Mapper 对 (t, 1) 求和
                     dfMap.merge(t, 1, Integer::sum);

@@ -379,7 +379,12 @@ public class JsonUtil {
         StringBuilder sb = new StringBuilder(1024);
         sb.append("{\"n\":").append(r.n);
         sb.append(",\"subsetAccuracy\":").append(r.subsetAccuracy != null ? String.format("%.6f", r.subsetAccuracy) : "null");
+        // 2026-10-28 补：评审要求指标文件自带 P/R，不能只给 F1（否则无法核对）
+        sb.append(",\"microPrecision\":").append(r.microPrecision != null ? String.format("%.6f", r.microPrecision) : "null");
+        sb.append(",\"microRecall\":").append(r.microRecall != null ? String.format("%.6f", r.microRecall) : "null");
         sb.append(",\"microF1\":").append(r.microF1 != null ? String.format("%.6f", r.microF1) : "null");
+        sb.append(",\"macroPrecision\":").append(r.macroPrecision != null ? String.format("%.6f", r.macroPrecision) : "null");
+        sb.append(",\"macroRecall\":").append(r.macroRecall != null ? String.format("%.6f", r.macroRecall) : "null");
         sb.append(",\"macroF1\":").append(r.macroF1 != null ? String.format("%.6f", r.macroF1) : "null");
         sb.append(",\"hammingLoss\":").append(r.hammingLoss != null ? String.format("%.6f", r.hammingLoss) : "null");
         sb.append(",\"perGenre\":{");

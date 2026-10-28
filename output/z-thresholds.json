@@ -1,0 +1,20 @@
+{
+  "action": 1.15,
+  "adventure": 1.15,
+  "fantasy": 1.4,
+  "sciencefiction": 1.3,
+  "crime": 1.3,
+  "drama": 0.95,
+  "thriller": 1.15,
+  "animation": 1.45,
+  "family": 1.2,
+  "western": 1.9,
+  "comedy": 1.15,
+  "romance": 1.25,
+  "horror": 1.45,
+  "mystery": 1.5,
+  "history": 1.65,
+  "war": 1.55,
+  "music": 1.55,
+  "documentary": 1.8
+}
